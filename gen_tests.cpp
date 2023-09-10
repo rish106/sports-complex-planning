@@ -4,9 +4,9 @@ using namespace std;
 
 int main() {
     srand(time(0));
-    int t = 1 + rand() % 10;
-    int z = 1 + rand() % 100;
-    int l = z + rand() % 100;
+    int t = 2;
+    int z = 1000;
+    int l = 1000;
     cout << t << '\n';
     cout << z << '\n';
     cout << l << '\n';

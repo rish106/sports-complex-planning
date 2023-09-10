@@ -1,14 +1,16 @@
 #include <fstream>
 #include <iostream>
-#include <bits/stdc++.h>
+#include <vector>
+#include <chrono>
+#include "SportsLayout.h"
 
 using namespace std;
 
-#include "SportsLayout.h"
+typedef long long ll;
 
 SportsLayout::SportsLayout(string inputfilename) {
     read_input_file(inputfilename);
-    best_mapping = new int[l];
+    best_mapping = new int[z];
 }
 
 bool SportsLayout::check_output_format() {
@@ -30,11 +32,11 @@ bool SportsLayout::check_output_format() {
 
 }
 
-long long SportsLayout::cost_fn() {
-    long long cost = 0;
+ll SportsLayout::cost_fn() {
+    ll cost = 0;
     for (int i = 0; i < z; i++) {
         for (int j = 0; j < z; j++) {
-            cost += (long long)N[i][j] * (long long)T[best_mapping[i]-1][best_mapping[j]-1];
+            cost += N[i][j] * T[best_mapping[i] - 1][best_mapping[j] - 1];
         }
     }
     return cost;
@@ -57,16 +59,16 @@ void SportsLayout::read_input_file(string inputfilename)
         exit(0);
     }
 
-    int **tempT;
-    int **tempN;
+    ll **tempT;
+    ll **tempN;
 
-    tempT = new int*[l];
+    tempT = new ll*[l];
     for (int i = 0; i < l; ++i) {
-        tempT[i] = new int[l];
+        tempT[i] = new ll[l];
     }
-    tempN = new int*[z];
+    tempN = new ll*[z];
     for (int i = 0; i < z; ++i) {
-        tempN[i] = new int[z];
+        tempN[i] = new ll[z];
     }
 
     for (int i = 0; i < z; i++) {
@@ -108,18 +110,33 @@ void SportsLayout::write_to_file(string output_filename){
 
 void SportsLayout::compute_allocation()
 {
+    auto start = chrono::high_resolution_clock::now();
     int curr_mapping[l];
-    obj_matrix = new int*[z];
+    obj_matrix = new ll*[z];
     for (int i = 0; i < z; i++) {
-        obj_matrix[i] = new int[z];
+        obj_matrix[i] = new ll[z];
     }
+    ll best_cost;
+    ll MAX_DURATION_MILLISECONDS = ll(time * 60.0 * 1000.0) - 500;
+
+    auto time_limit_exceeded = [&]() {
+        auto curr = chrono::high_resolution_clock::now();
+        auto elapsed_milliseconds = chrono::duration_cast<chrono::milliseconds>(curr - start);
+        return elapsed_milliseconds.count() >= MAX_DURATION_MILLISECONDS;
+    };
 
     auto randomise_mapping = [&]() {
         for (int i = 0; i < l; i++) {
+            if (time_limit_exceeded()) {
+                return;
+            }
             curr_mapping[i] = i+1;
         }
         srand(std::time(0));
-        for (int i = l-1; i > 0; i--) {
+        for (int i = l - 1; i > 0; i--) {
+            if (time_limit_exceeded()) {
+                return;
+            }
             int k = rand() % (i + 1);
             swap(curr_mapping[i], curr_mapping[k]);
         }
@@ -129,28 +146,30 @@ void SportsLayout::compute_allocation()
         obj_value = 0;
         for (int i = 0; i < z; i++) {
             for (int j = 0; j < z; j++) {
+                if (time_limit_exceeded()) {
+                    return;
+                }
                 obj_matrix[i][j] = N[i][j] * T[curr_mapping[i] - 1][curr_mapping[j] - 1];
                 obj_value += obj_matrix[i][j];
             }
         }
     };
 
-    randomise_mapping();
-    calculate_objective_matrix();
-    for (int i = 0; i < l; i++) {
-        best_mapping[i] = curr_mapping[i];
-    }
-    int best_cost = obj_value;
-
     auto delta_from_swap = [&](int i, int j) {
-        int delta = 0;
+        ll delta = 0;
         for (int k = 0; k < z; k++) {
+            if (time_limit_exceeded()) {
+                return 0ll;
+            }
             if (k != i && k != j) {
                 delta += N[i][k] * T[curr_mapping[j] - 1][curr_mapping[k] - 1] - obj_matrix[i][k];
                 delta += N[k][i] * T[curr_mapping[k] - 1][curr_mapping[j] - 1] - obj_matrix[k][i];
             }
         }
         for (int k = 0; j < z && k < z; k++) {
+            if (time_limit_exceeded()) {
+                return 0ll;
+            }
             if (k != i && k != j) {
                 delta += N[j][k] * T[curr_mapping[i] - 1][curr_mapping[k] - 1] - obj_matrix[j][k];
                 delta += N[k][j] * T[curr_mapping[k] - 1][curr_mapping[i] - 1] - obj_matrix[k][j];
@@ -163,35 +182,50 @@ void SportsLayout::compute_allocation()
         return delta;
     };
 
-    auto update = [&](int i, int j) {
+    auto update_best_mapping = [&]() {
+        for (int i = 0; i < z; i++) {
+            best_mapping[i] = curr_mapping[i];
+        }
+    };
+
+    auto mapping_swap = [&](int i, int j) {
         swap(curr_mapping[i], curr_mapping[j]);
         for (int k = 0; k < z; k++) {
+            if (time_limit_exceeded()) {
+                return;
+            }
             if (k != i) {
                 obj_matrix[i][k] = N[i][k] * T[curr_mapping[i] - 1][curr_mapping[k] - 1];
                 obj_matrix[k][i] = N[k][i] * T[curr_mapping[k] - 1][curr_mapping[i] - 1];
             }
         }
-        for (int k = 0; j < z && k < z; k++) {
-            if (k != j) {
-                obj_matrix[j][k] = N[j][k] * T[curr_mapping[j] - 1][curr_mapping[k] - 1];
-                obj_matrix[k][j] = N[k][j] * T[curr_mapping[k] - 1][curr_mapping[j] - 1];
+        if (j < z) {
+            for (int k = 0; k < z; k++) {
+                if (time_limit_exceeded()) {
+                    return;
+                }
+                if (k != j) {
+                    obj_matrix[j][k] = N[j][k] * T[curr_mapping[j] - 1][curr_mapping[k] - 1];
+                    obj_matrix[k][j] = N[k][j] * T[curr_mapping[k] - 1][curr_mapping[j] - 1];
+                }
             }
         }
         if (obj_value < best_cost) {
             best_cost = obj_value;
-            for (int i = 0; i < l; i++) {
-                best_mapping[i] = curr_mapping[i];
-            }
+            update_best_mapping();
         }
     };
 
     auto check_neighbours = [&]() {
         for (int i = 0; i < z; i++) {
             for (int j = i+1; j < l; j++) {
-                int delta = delta_from_swap(i, j);
+                if (time_limit_exceeded()) {
+                    return true;
+                }
+                ll delta = delta_from_swap(i, j);
                 if (delta < 0) {
                     obj_value += delta;
-                    update(i, j);
+                    mapping_swap(i, j);
                     return true;
                 }
             }
@@ -199,19 +233,18 @@ void SportsLayout::compute_allocation()
         return false;
     };
 
-    atomic<bool> stop_processing(false);
-    int time_milliseconds = time * 6 * 1000 - 1000;
-    thread timer_thread([&]() {
-        this_thread::sleep_for(chrono::milliseconds(time_milliseconds));
-        stop_processing.store(true);
-    });
-    auto start_time = chrono::high_resolution_clock::now();
-    while (!stop_processing.load()) {
+    randomise_mapping();
+    calculate_objective_matrix();
+    update_best_mapping();
+    best_cost = obj_value;
+
+    while (true) {
+        if (time_limit_exceeded()) {
+            break;
+        }
         if (!check_neighbours()) {
             randomise_mapping();
             calculate_objective_matrix();
         }
     }
-    timer_thread.join();
-    cout << "best_cost: " << best_cost << '\n';
 }
